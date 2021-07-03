@@ -1,75 +1,99 @@
 <template>
-  <div class="hello">
-    <select id="certificate" name="certificate" required v-model="thumbprint">
-      <option value="null" disabled>Не выбран</option>
-      <option
-              v-for="cert in certificateList"
-              v-bind:key="cert.thumbprint">
-        {{cert.name}}
+  <b-container>
+    <span>Установленные сертификаты:</span>
+    <b-select id="certificate" name="certificate" required v-model="thumb" :select-size="4">
+      <option v-for="cert in certificateList" v-bind:key="cert.thumbprint" v-bind:value="cert.thumbprint">
+        {{cert.name}}, действителен до: {{cert.validTo | formatDate}}
       </option>
-    </select><br>
-    <span>Выбрано: {{ thumbprint }}</span>
-    <h1>{{ msg }}</h1>
-  </div>
+    </b-select>
+    <a href="https://www.cryptopro.ru/sites/default/files/products/cades/demopage/cades_bes_sample.html" target="_blank">
+      Проверка работы плагина, получение сертификатов
+    </a>
+    <br><br>
+    <b-file v-model="file_name" placeholder="Выберите файл..."></b-file><br><br>
+    <b-button :disabled="thumb==''||file_name==null" variant="success" @click="sign()">Подписать</b-button><br><br>
+    <b-textarea class="textarea" id="signature" rows="20" v-model="signature" readOnly/><br>
+    <b-button :disabled="signature==''||file_name==null" variant="success" @click="download(file_name,signature)">Скачать файл ЭП</b-button><br>
+    <a href="https://crypto.kontur.ru/verify#" target="_blank">
+      Проверка ЭП
+    </a>
+
+  </b-container>
 </template>
 
 <script>
-  import { getUserCertificates } from 'crypto-pro';
-  // var certificateListt = [
-  //   {thumbprint:"1", name:"rer"},
-  //   {thumbprint:"2", name:"er"}
-  // ];
-  let tt = '123';
-  // (async () => {
-  //   try {
-  //     console.log(certificateListt)
-  //     console.log(certificateListt.length)
-  //     console.log(typeof(certificateListt))
-  //     certificateListt = await getUserCertificates();
-  //     console.log(certificateListt)
-  //     console.log(typeof(certificateListt))
-  //     console.log(certificateListt.length)
-  //   } catch(error) {
-  //     // ...
-  //   }
-  // })();
-  // console.log(certificateListt)
-  // console.log(typeof(certificateListt))
-  // console.log(certificateListt.length)
-export default {
-  asyncComputed: {
-    async certificateList() {
-      return await getUserCertificates()
-    }
-  },
-  name: 'HelloWorld',
-  data () {
-    return {
-      // certificateList: certificateListt,
-      thumbprint: tt
-    }
-  },
-  props: {
-    msg: String
-  }
-}
+  import { getUserCertificates,createDetachedSignature,createHash } from 'crypto-pro';
 
+  function readFile(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = res => {
+        resolve(res.target.result);
+      };
+      reader.onerror = err => reject(err);
+      reader.readAsArrayBuffer(file);
+      console.log(file.filename);
+    });
+  }
+
+  export default {
+    asyncComputed: {
+      async certificateList() {
+        try {
+          return await getUserCertificates()
+        } catch (getUserCertificatesError) {
+          console.log(getUserCertificatesError);
+        }
+      },
+      async sign_string(){
+        if((this.filecontent!=null)&&(this.thumb!='')){
+          let s='';
+          try {
+            const messageHash = await createHash(this.filecontent);
+            console.log(messageHash)
+            try {
+              s = await createDetachedSignature(this.thumb, messageHash);
+            } catch (signatureError) {
+              console.log(signatureError);
+            }
+          } catch (hashError) {
+            console.log(hashError);
+          }
+          return s;
+        }
+      },
+      async filecontent() {
+        if (this.file_name != null) {
+          const contents = await readFile(this.file_name);
+          return contents;
+        } else {
+          return null
+        }
+      }
+    },
+    data() {
+      return {
+        thumb: '',
+        signature: '',
+        file_name: null
+      };
+    },
+    methods: {
+      sign() {
+        this.signature = this.sign_string;
+        console.log(typeof this.signature);
+      },
+      download() {
+        var element = document.createElement('a');
+        element.setAttribute('href', 'data:text/plain;charset=utf-8,' + encodeURIComponent(this.signature));
+        element.setAttribute('download', this.file_name.name + '.sgn');
+        element.style.display = 'none';
+        document.body.appendChild(element);
+        element.click();
+        document.body.removeChild(element);
+      }
+    },
+  name: 'Certificates'
+  }
 </script>
 
-<!-- Add "scoped" attribute to limit CSS to this component only -->
-<style scoped>
-h3 {
-  margin: 40px 0 0;
-}
-ul {
-  list-style-type: none;
-  padding: 0;
-}
-li {
-  display: inline-block;
-  margin: 0 10px;
-}
-a {
-  color: #42b983;
-}
-</style>
